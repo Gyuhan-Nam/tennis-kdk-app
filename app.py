@@ -9,94 +9,77 @@ st.set_page_config(page_title="KDK 테니스", layout="wide")
 # 2. 구글 시트 연결
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 3. [가로 폭 압축] 핵심 CSS 수정
+# 3. [스케치 반영] 핵심 CSS
 st.markdown("""
     <style>
-    /* 전체 여백 제거 */
-    .block-container { padding: 0.5rem !important; }
+    .block-container { padding: 1rem 0.5rem !important; }
     
-    /* [가로 정렬 강제] 컬럼이 세로로 쌓이는 현상 절대 방지 */
+    /* 메인 3컬럼 가로 고정 */
     [data-testid="stHorizontalBlock"] {
         display: flex !important;
         flex-direction: row !important;
         flex-wrap: nowrap !important;
         align-items: center !important;
-        justify-content: center !important;
-        gap: 2px !important;
-    }
-    [data-testid="column"] {
-        min-width: 0px !important;
-        flex: 1 !important;
-        padding: 0px !important;
+        gap: 5px !important;
     }
 
-    /* [검은 칸 너비 조절] 가로 길이를 줄이고 가운데 정렬 */
-    .player-box {
-        background-color: #1e293b;
-        color: white;
-        border-radius: 6px;
-        padding: 4px 2px !important;
+    /* 선수 성명 영역 (수직 쌓기) */
+    .name-area {
         text-align: center;
-        font-size: 0.8rem !important;
-        line-height: 1.1 !important;
-        min-height: 40px !important;
-        width: 85% !important; /* 가로 너비 85%로 축소 */
-        max-width: 90px !important; /* 최대 너비 제한 */
-        margin: 0 auto 4px auto !important; /* 가운데 정렬 및 하단 여백 */
-        display: flex;
-        flex-direction: column;
-        justify-content: center;
+        font-size: 1.1rem !important;
+        font-weight: bold;
+        line-height: 1.2;
+        color: #1e293b;
+        margin-bottom: 5px;
     }
 
-    /* 점수판 영역 축소 */
+    /* 점수 표시 */
     .score-display {
-        font-size: 2.2rem !important;
+        font-size: 3rem !important;
         font-weight: 800;
         color: #ff4b4b;
         text-align: center;
-        line-height: 1.0 !important;
+        line-height: 1 !important;
     }
-    .vs-text { font-size: 0.6rem; color: #64748b; text-align: center; margin-bottom: -4px; }
 
-    /* 버튼 크기 더 작게 (가로 폭에 맞춤) */
+    /* 플러스/마이너스 버튼 가로 나열을 위한 서브 컬럼 설정 */
+    .btn-row {
+        display: flex !important;
+        flex-direction: row !important;
+        gap: 2px !important;
+        justify-content: center !important;
+    }
+
+    /* 버튼 스타일 최적화 (작고 둥글게) */
     .stButton > button {
-        width: 85% !important;
-        max-width: 90px !important;
-        margin: 0 auto !important;
-        display: block !important;
-        height: 2rem !important;
-        font-size: 1rem !important;
+        width: 100% !important;
+        height: 2.2rem !important;
         padding: 0px !important;
+        font-size: 1.1rem !important;
+        font-weight: bold !important;
         border-radius: 6px !important;
     }
     
-    /* 리셋 버튼은 더 작게 */
-    .btn-reset button {
-        width: 40px !important;
-        height: 30px !important;
-        font-size: 0.8rem !important;
-    }
+    /* 플러스 버튼: 파란색 / 마이너스 버튼: 회색 */
+    .plus-btn button { background-color: #3b82f6 !important; color: white !important; }
+    .minus-btn button { background-color: #f1f5f9 !important; color: #475569 !important; border: 1px solid #cbd5e1 !important; }
 
     /* 저장 버튼 */
     .btn-save button {
-        width: 100% !important;
-        max-width: 250px !important;
         background-color: #10b981 !important;
         color: white !important;
         height: 3rem !important;
-        font-size: 1.1rem !important;
-        margin-top: 10px !important;
+        margin-top: 20px !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# 4. KDK 대진표 로직 (기존 동일)
+# --- 기본 로직 (대진표/DB는 이전과 동일) ---
 def get_kdk_matches(num):
     schedules = {5: ["12:34","13:25","14:35","15:24","23:45"], 6: ["12:34","15:46","23:56","14:25","24:36","16:35"], 7: ["12:34","56:17","35:24","14:67","23:57","16:25","46:37"], 8: ["12:34","56:78","13:57","24:68","15:26","37:48","16:38","25:47"], 9: ["12:34","56:78","19:57","23:68","49:38","15:26","36:45","17:89","24:79"], 10: ["12:34","56:78","23:6A","19:58","3A:45","27:89","4A:68","13:79","46:59","17:2A"]}
     mapping = {"1":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,"8":8,"9":9,"A":10}
     return [([mapping[c] for c in m.split(":")[0]], [mapping[c] for c in m.split(":")[1]]) for m in schedules.get(num, [])]
 
-# 5. DB 관련 함수 (기존 동일)
 REQUIRED_COLUMNS = ["date", "group", "match_id", "score1", "score2", "last_updated"]
 @st.cache_data(ttl=60)
 def load_db_cached():
@@ -106,95 +89,85 @@ def load_db_cached():
         return df
     except: return pd.DataFrame(columns=REQUIRED_COLUMNS)
 
-def load_db_fresh():
-    try:
-        df = conn.read(ttl=0)
-        if df is None or df.empty or 'date' not in df.columns: return pd.DataFrame(columns=REQUIRED_COLUMNS)
-        return df
-    except: return pd.DataFrame(columns=REQUIRED_COLUMNS)
-
 def save_db(df):
     conn.update(data=df)
     st.cache_data.clear()
 
-# ----------------------------------------------------------------
-# 메인 로직
-# ----------------------------------------------------------------
-st.title("🎾 KDK 테니스")
+# --- 메인 UI ---
+st.title("🎾 KDK 점수판")
 
 with st.sidebar:
     now = datetime.now()
-    year = st.selectbox("연도", range(2024, now.year + 2))
-    month = st.selectbox("월", [f"{i:02d}" for i in range(1, 13)], index=now.month-1)
-    target_month = f"{year}-{month}"
-    if st.button("🔄 동기화"):
-        st.cache_data.clear()
-        st.rerun()
+    target_month = f"{st.selectbox('연도', range(2024, now.year+2))}-{st.selectbox('월', [f'{i:02d}' for i in range(1, 13)], index=now.month-1)}"
+    if st.button("🔄 동기화"): st.cache_data.clear(); st.rerun()
 
 all_data = load_db_cached()
-tabs = st.tabs(["🥇 금", "🥈 은", "🥉 동"])
+group_key = st.radio("조 선택", ["gold", "silver", "bronze"], horizontal=True, label_visibility="collapsed")
 
-for i, group_name in enumerate(["금", "은", "동"]):
-    group_key = ["gold", "silver", "bronze"][i]
-    with tabs[i]:
-        # 설정 영역
-        c_n1, c_n2 = st.columns([1, 2])
-        with c_n1: n = st.number_input(f"인원", 5, 10, 6, key=f"n_{group_key}")
-        with c_n2:
-            with st.expander("👤 이름편집"):
-                p_names = [st.text_input(f"{j+1}", f"P{j+1}", key=f"nm_{group_key}_{j}") for j in range(n)]
+# 인원 및 이름 설정
+c_set1, c_set2 = st.columns([1, 2])
+with c_set1: n = st.number_input(f"인원", 5, 10, 6, key=f"n_{group_key}")
+with c_set2:
+    with st.expander("👤 이름편집"):
+        p_names = [st.text_input(f"{j+1}", f"P{j+1}", key=f"nm_{group_key}_{j}") for j in range(n)]
 
-        matches = get_kdk_matches(n)
-        selected_m_idx = st.selectbox(f"경기 선택", range(len(matches)), 
-                                      format_func=lambda x: f"{x+1}R: {matches[x][0]} vs {matches[x][1]}", 
-                                      key=f"sel_{group_key}")
+matches = get_kdk_matches(n)
+selected_m_idx = st.selectbox(f"경기 선택", range(len(matches)), format_func=lambda x: f"{x+1}R: {matches[x][0]} vs {matches[x][1]}", key=f"sel_{group_key}")
 
-        ss_key_s1 = f"local_s1_{group_key}_{selected_m_idx}"
-        ss_key_s2 = f"local_s2_{group_key}_{selected_m_idx}"
+# 세션 점수 로드
+ss1, ss2 = f"s1_{group_key}_{selected_m_idx}", f"s2_{group_key}_{selected_m_idx}"
+if ss1 not in st.session_state:
+    curr_m = all_data[(all_data['date']==target_month) & (all_data['group']==group_key) & (all_data['match_id']==selected_m_idx)]
+    st.session_state[ss1] = int(curr_m.iloc[0]['score1']) if not curr_m.empty else 0
+    st.session_state[ss2] = int(curr_m.iloc[0]['score2']) if not curr_m.empty else 0
 
-        if ss_key_s1 not in st.session_state:
-            curr_m = all_data[(all_data['date']==target_month) & (all_data['group']==group_key) & (all_data['match_id']==selected_m_idx)]
-            st.session_state[ss_key_s1] = int(curr_m.iloc[0]['score1']) if not curr_m.empty else 0
-            st.session_state[ss_key_s2] = int(curr_m.iloc[0]['score2']) if not curr_m.empty else 0
+# ----------------------------------------------------------------
+# [스케치 구현 핵심 구문]
+# ----------------------------------------------------------------
+t1, t2 = matches[selected_m_idx]
+m_col1, m_col_mid, m_col2 = st.columns([1, 1, 1])
 
-        # --- 가로 고정 점수판 UI ---
-        t1, t2 = matches[selected_m_idx]
-        col1, col_mid, col2 = st.columns([2, 1.2, 2])
-        
-        with col1:
-            st.markdown(f"<div class='player-box'>{p_names[t1[0]-1]}<br>{p_names[t1[1]-1]}</div>", unsafe_allow_html=True)
-            if st.button("➕", key=f"p1_u_{group_key}"):
-                st.session_state[ss_key_s1] = min(6, st.session_state[ss_key_s1] + 1); st.rerun()
-            if st.button("➖", key=f"p1_d_{group_key}"):
-                st.session_state[ss_key_s1] = max(0, st.session_state[ss_key_s1] - 1); st.rerun()
-
-        with col_mid:
-            st.markdown(f"<div class='vs-text'>VS</div><div class='score-display'>{st.session_state[ss_key_s1]}:{st.session_state[ss_key_s2]}</div>", unsafe_allow_html=True)
-            st.markdown("<div class='btn-reset'>", unsafe_allow_html=True)
-            if st.button("🔄", key=f"rs_{group_key}"):
-                st.session_state[ss_key_s1] = 0; st.session_state[ss_key_s2] = 0; st.rerun()
-            st.markdown("</div>", unsafe_allow_html=True)
-
-        with col2:
-            st.markdown(f"<div class='player-box'>{p_names[t2[0]-1]}<br>{p_names[t2[1]-1]}</div>", unsafe_allow_html=True)
-            if st.button("➕ ", key=f"p2_u_{group_key}"):
-                st.session_state[ss_key_s2] = min(6, st.session_state[ss_key_s2] + 1); st.rerun()
-            if st.button("➖ ", key=f"p2_d_{group_key}"):
-                st.session_state[ss_key_s2] = max(0, st.session_state[ss_key_s2] - 1); st.rerun()
-
-        st.markdown("<div class='btn-save'>", unsafe_allow_html=True)
-        if st.button(f"💾 결과 저장", key=f"save_{group_key}"):
-            with st.spinner("저장 중..."):
-                df = load_db_fresh()
-                mask = (df['date'] == target_month) & (df['group'] == group_key) & (df['match_id'] == selected_m_idx)
-                if not df[mask].empty:
-                    df.loc[mask, ['score1', 'score2', 'last_updated']] = [st.session_state[ss_key_s1], st.session_state[ss_key_s2], str(datetime.now())]
-                else:
-                    new_row = pd.DataFrame([{"date": target_month, "group": group_key, "match_id": selected_m_idx, "score1": st.session_state[ss_key_s1], "score2": st.session_state[ss_key_s2], "last_updated": str(datetime.now())}])
-                    df = pd.concat([df, new_row], ignore_index=True)
-                save_db(df)
-                st.success("저장 완료!"); st.rerun()
+with m_col1:
+    # 성명 수직 배치
+    st.markdown(f"<div class='name-area'>{p_names[t1[0]-1]}<br>{p_names[t1[1]-1]}</div>", unsafe_allow_html=True)
+    # 버튼 가로 배치 (서브 컬럼)
+    b1, b2 = st.columns(2)
+    with b1:
+        st.markdown("<div class='plus-btn'>", unsafe_allow_html=True)
+        if st.button("＋", key="p1u"): st.session_state[ss1] = min(6, st.session_state[ss1]+1); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
+    with b2:
+        st.markdown("<div class='minus-btn'>", unsafe_allow_html=True)
+        if st.button("－", key="p1d"): st.session_state[ss1] = max(0, st.session_state[ss1]-1); st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+with m_col_mid:
+    st.markdown(f"<div class='score-display'>{st.session_state[ss1]}:{st.session_state[ss2]}</div>", unsafe_allow_html=True)
+    if st.button("🔄", key="reset"): st.session_state[ss1]=0; st.session_state[ss2]=0; st.rerun()
+
+with m_col2:
+    # 성명 수직 배치
+    st.markdown(f"<div class='name-area'>{p_names[t2[0]-1]}<br>{p_names[t2[1]-1]}</div>", unsafe_allow_html=True)
+    # 버튼 가로 배치 (서브 컬럼)
+    b3, b4 = st.columns(2)
+    with b3:
+        st.markdown("<div class='plus-btn'>", unsafe_allow_html=True)
+        if st.button("＋ ", key="p2u"): st.session_state[ss2] = min(6, st.session_state[ss2]+1); st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+    with b4:
+        st.markdown("<div class='minus-btn'>", unsafe_allow_html=True)
+        if st.button("－ ", key="p2d"): st.session_state[ss2] = max(0, st.session_state[ss2]-1); st.rerun()
+        st.markdown("</div>", unsafe_allow_html=True)
+
+# 저장 버튼
+st.markdown("<div class='btn-save'>", unsafe_allow_html=True)
+if st.button("💾 경기 결과 저장", key="sv"):
+    df = conn.read(ttl=0)
+    mask = (df['date']==target_month) & (df['group']==group_key) & (df['match_id']==selected_m_idx)
+    if not df[mask].empty: df.loc[mask, ['score1','score2','last_updated']] = [st.session_state[ss1], st.session_state[ss2], str(datetime.now())]
+    else: df = pd.concat([df, pd.DataFrame([{"date":target_month, "group":group_key, "match_id":selected_m_idx, "score1":st.session_state[ss1], "score2":st.session_state[ss2], "last_updated":str(datetime.now())}])], ignore_index=True)
+    save_db(df); st.success("저장되었습니다!"); st.rerun()
+st.markdown("</div>", unsafe_allow_html=True)
 
         # 순위표
         st.divider()
