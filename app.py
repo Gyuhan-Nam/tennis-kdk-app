@@ -1,22 +1,37 @@
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+from datetime import datetime
 
 # 1. 페이지 설정
 st.set_page_config(page_title="KDK 테니스 월례회", layout="wide")
 
+# 2. 구글 시트 연결
+conn = st.connection("gsheets", type=GSheetsConnection)
+
+# 3. CSS 스타일 (모바일 최적화 및 버튼 디자인)
 st.markdown("""
     <style>
-    .stButton>button { width: 100%; height: 3.5em; font-size: 1.5rem !important; font-weight: bold; }
-    .score-display { font-size: 4rem; font-weight: bold; text-align: center; color: #ff4b4b; background-color: #f0f2f6; border-radius: 10px; padding: 10px; margin: 10px 0; border: 2px solid #d1d5db; }
-    .team-name { font-size: 1.3rem; font-weight: bold; text-align: center; min-height: 60px; display: flex; align-items: center; justify-content: center; background-color: #3b82f6; color: white; border-radius: 8px; padding: 10px; }
+    .stButton>button { width: 100%; height: 3.5em; font-size: 1.5rem !important; font-weight: bold; border-radius: 12px; }
+    /* 플러스 버튼 (파란색) */
+    div[data-testid="stVerticalBlock"] > div:nth-child(2) button { background-color: #3b82f6; color: white; border: none; }
+    /* 마이너스 버튼 (회색) */
+    div[data-testid="stVerticalBlock"] > div:nth-child(3) button { background-color: #64748b; color: white; border: none; opacity: 0.8; }
+    
+    .player-box {
+        font-size: 1.2rem; font-weight: bold; text-align: center; background-color: #1e293b; color: white;
+        border-radius: 10px; padding: 15px 5px; min-height: 90px; display: flex; flex-direction: column;
+        justify-content: center; line-height: 1.4; margin-bottom: 10px;
+    }
+    .score-display {
+        font-size: 4rem; font-weight: 900; color: #ff4b4b; text-align: center; line-height: 1.1; margin: 10px 0;
+    }
+    .vs-text { font-size: 1rem; color: #64748b; text-align: center; font-weight: bold; margin-bottom: -15px; }
+    .rank-table { font-size: 0.9rem; }
     </style>
     """, unsafe_allow_html=True)
 
-st.title("🎾 KDK 테니스 월례회 통합 시스템")
-
-# ----------------------------------------------------------------
-# 2. 대진표 파싱 로직 (공통 함수)
-# ----------------------------------------------------------------
+# 4. KDK 대진표 파싱 로직
 def get_kdk_matches(num):
     schedules = {
         5: ["12:34","13:25","14:35","15:24","23:45"],
@@ -24,137 +39,126 @@ def get_kdk_matches(num):
         7: ["12:34","56:17","35:24","14:67","23:57","16:25","46:37"],
         8: ["12:34","56:78","13:57","24:68","15:26","37:48","16:38","25:47"],
         9: ["12:34","56:78","19:57","23:68","49:38","15:26","36:45","17:89","24:79"],
-        10: ["12:34","56:78","23:6A","19:58","3A:45","27:89","4A:68","13:79","46:59","17:2A"],
-        11: ["12:34","56:78","1B:9A","23:68","4A:57","26:9B","13:5B","49:8A","17:28","5A:6B","39:47"],
-        12: ["12:34","56:78","9A:BC","13:57","24:68","9B:15","AC:23","48:7B","6A:19","2C:5B","36:8A","9C:47"]
+        10: ["12:34","56:78","23:6A","19:58","3A:45","27:89","4A:68","13:79","46:59","17:2A"]
     }
+    mapping = {"1":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,"8":8,"9":9,"A":10}
     raw = schedules.get(num, [])
-    mapping = {"1":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,"8":8,"9":9,"A":10,"B":11,"C":12}
     parsed = []
     for m in raw:
         t1s, t2s = m.split(":")
         parsed.append(([mapping[c] for c in t1s], [mapping[c] for c in t2s]))
     return parsed
 
+# 5. DB 관련 함수
+def load_db():
+    return conn.read(ttl=0)
+
+def save_db(month, group, match_id, s1, s2):
+    df = load_db()
+    # 기존 기록 찾기
+    mask = (df['date'] == month) & (df['group'] == group) & (df['match_id'] == match_id)
+    if not df[mask].empty:
+        df.loc[mask, ['score1', 'score2', 'last_updated']] = [s1, s2, str(datetime.now())]
+    else:
+        new_data = pd.DataFrame([{"date": month, "group": group, "match_id": match_id, "score1": s1, "score2": s2, "last_updated": str(datetime.now())}])
+        df = pd.concat([df, new_data], ignore_index=True)
+    conn.update(data=df)
+    st.cache_data.clear()
+
 # ----------------------------------------------------------------
-# 3. 조별 UI 렌더링 함수 (금/은/동 공통 사용)
+# 메인 화면 구성
 # ----------------------------------------------------------------
-def run_group_logic(group_key, group_name):
-    # 인원수 설정
-    n_key = f"n_{group_key}"
-    if n_key not in st.session_state: st.session_state[n_key] = 6
-    
-    col_set1, col_set2 = st.columns([1, 4])
-    with col_set1:
-        n = st.number_input(f"{group_name} 인원", 5, 12, value=st.session_state[n_key], key=f"input_{n_key}")
-        if n != st.session_state[n_key]:
-            st.session_state[n_key] = n
-            # 해당 조의 모든 데이터 초기화
-            for k in list(st.session_state.keys()):
-                if k.startswith(f"sc_{group_key}") or k.startswith(f"name_{group_key}"):
-                    del st.session_state[k]
-            st.rerun()
+st.title("🎾 KDK 테니스 통합 시스템")
 
-    # 선수 이름 입력
-    with st.expander(f"👤 {group_name} 선수 명단 편집"):
-        p_names = []
-        cols = st.columns(4)
-        for i in range(n):
-            with cols[i % 4]:
-                name = st.text_input(f"{i+1}번", value=f"P{i+1}", key=f"name_{group_key}_{i}")
-                p_names.append(name)
+# 사이드바 설정
+with st.sidebar:
+    st.header("📅 대회 정보")
+    today = datetime.now().strftime("%Y-%m")
+    target_month = st.selectbox("대회 월 선택", [f"2024-{i:02d}" for i in range(1, 13)], index=int(datetime.now().month)-1)
+    if st.button("🔄 데이터 강제 새로고침"):
+        st.rerun()
 
-    # 대진표 가져오기
-    matches = get_kdk_matches(n)
-    
-    # 경기 선택
-    g_idx_key = f"g_idx_{group_key}"
-    if g_idx_key not in st.session_state: st.session_state[g_idx_key] = 0
-    
-    labels = []
-    for i, (t1, t2) in enumerate(matches):
-        s_k = f"sc_{group_key}_{i}"
-        is_done = f"✅" if s_k in st.session_state and sum(st.session_state[s_k]) > 0 else "⚪"
-        t1_ns = ",".join([str(x) for x in t1])
-        t2_ns = ",".join([str(x) for x in t2])
-        labels.append(f"{is_done} {i+1}경기 ({t1_ns} vs {t2_ns})")
+all_data = load_db()
+tabs = st.tabs(["🥇 금조", "🥈 은조", "🥉 동조"])
 
-    selected_idx = st.selectbox(f"{group_name} 경기 선택", range(len(matches)), 
-                                index=st.session_state[g_idx_key], 
-                                format_func=lambda x: labels[x], key=f"select_{group_key}")
-    st.session_state[g_idx_key] = selected_idx
+for i, group_name in enumerate(["금조", "은조", "동조"]):
+    group_key = ["gold", "silver", "bronze"][i]
+    with tabs[i]:
+        # 1. 설정 및 이름 입력
+        col_n1, col_n2 = st.columns([1, 3])
+        with col_n1:
+            n = st.number_input(f"인원({group_name})", 5, 10, 6, key=f"n_{group_key}")
+        with col_n2:
+            with st.expander("👤 선수 명단 편집"):
+                p_names = [st.text_input(f"{j+1}번", f"선수{j+1}", key=f"nm_{group_key}_{j}") for j in range(n)]
 
-    # 경기 대진 표시
-    t1_ids, t2_ids = matches[selected_idx]
-    team1_display = " & ".join([p_names[idx-1] for idx in t1_ids])
-    team2_display = " & ".join([p_names[idx-1] for idx in t2_ids])
-    
-    st.info(f"**현재 경기:** {team1_display}  **VS**  {team2_display}")
+        # 2. 대진표 및 경기 선택
+        matches = get_kdk_matches(n)
+        m_labels = []
+        for idx, (t1, t2) in enumerate(matches):
+            m_db = all_data[(all_data['date']==target_month) & (all_data['group']==group_key) & (all_data['match_id']==idx)]
+            status = "✅" if not m_db.empty and (m_db.iloc[0]['score1'] > 0 or m_db.iloc[0]['score2'] > 0) else "⚪"
+            m_labels.append(f"{status} {idx+1}경기 ({t1} vs {t2})")
+        
+        selected_m_idx = st.selectbox(f"경기 선택", range(len(matches)), format_func=lambda x: m_labels[x], key=f"sel_{group_key}")
 
-    # 점수 입력 UI
-    score_key = f"sc_{group_key}_{selected_idx}"
-    if score_key not in st.session_state: st.session_state[score_key] = [0, 0]
+        # 3. 점수 입력 UI (요청하신 수직형 모바일 최적화)
+        curr_m = all_data[(all_data['date']==target_month) & (all_data['group']==group_key) & (all_data['match_id']==selected_m_idx)]
+        s1 = int(curr_m.iloc[0]['score1']) if not curr_m.empty else 0
+        s2 = int(curr_m.iloc[0]['score2']) if not curr_m.empty else 0
+        
+        t1_ids, t2_ids = matches[selected_m_idx]
+        
+        st.write("") # 간격
+        c1, c_mid, c2 = st.columns([2, 1.5, 2])
+        
+        with c1:
+            st.markdown(f"<div class='player-box'>{p_names[t1_ids[0]-1]}<br>{p_names[t1_ids[1]-1]}</div>", unsafe_allow_html=True)
+            if st.button("➕", key=f"p1_up_{group_key}"):
+                save_db(target_month, group_key, selected_m_idx, s1+1, s2); st.rerun()
+            if st.button("➖", key=f"p1_down_{group_key}"):
+                save_db(target_month, group_key, selected_m_idx, max(0, s1-1), s2); st.rerun()
 
-    c1, c2, c3 = st.columns([2, 1, 2])
-    with c1:
-        st.markdown(f"<div class='team-name'>{team1_display}</div>", unsafe_allow_html=True)
-        if st.button("➕", key=f"p1_{group_key}_{selected_idx}"):
-            st.session_state[score_key][0] = min(6, st.session_state[score_key][0] + 1); st.rerun()
-        if st.button("➖", key=f"m1_{group_key}_{selected_idx}"):
-            st.session_state[score_key][0] = max(0, st.session_state[score_key][0] - 1); st.rerun()
-    with c2:
-        st.markdown(f"<div class='score-display'>{st.session_state[score_key][0]}:{st.session_state[score_key][1]}</div>", unsafe_allow_html=True)
-    with c3:
-        st.markdown(f"<div class='team-name'>{team2_display}</div>", unsafe_allow_html=True)
-        if st.button("➕ ", key=f"p2_{group_key}_{selected_idx}"):
-            st.session_state[score_key][1] = min(6, st.session_state[score_key][1] + 1); st.rerun()
-        if st.button("➖ ", key=f"m2_{group_key}_{selected_idx}"):
-            st.session_state[score_key][1] = max(0, st.session_state[score_key][1] - 1); st.rerun()
+        with c_mid:
+            st.markdown(f"<div class='vs-text'>VS</div><div class='score-display'>{s1}:{s2}</div>", unsafe_allow_html=True)
+            if st.button("🔄", key=f"reset_{group_key}"):
+                save_db(target_month, group_key, selected_m_idx, 0, 0); st.rerun()
 
-    # 순위표 계산
-    st.divider()
-    st.subheader(f"🏆 {group_name} 순위표")
-    stats = {i: {"승":0,"패":0,"득":0,"실":0,"결과":["-"]*len(matches)} for i in range(1, n+1)}
-    for i, (t1, t2) in enumerate(matches):
-        sk = f"sc_{group_key}_{i}"
-        if sk in st.session_state:
-            v1, v2 = st.session_state[sk]
-            if v1 == 0 and v2 == 0: continue
+        with c2:
+            st.markdown(f"<div class='player-box'>{p_names[t2_ids[0]-1]}<br>{p_names[t2_ids[1]-1]}</div>", unsafe_allow_html=True)
+            if st.button("➕ ", key=f"p2_up_{group_key}"):
+                save_db(target_month, group_key, selected_m_idx, s1, s2+1); st.rerun()
+            if st.button("➖ ", key=f"p2_down_{group_key}"):
+                save_db(target_month, group_key, selected_m_idx, s1, max(0, s2-1)); st.rerun()
+
+        # 4. 순위표 계산 및 표시
+        st.divider()
+        st.subheader(f"🏆 {group_name} 실시간 순위")
+        
+        stats = {i: {"승":0,"패":0,"득":0,"실":0} for i in range(1, n+1)}
+        group_db = all_data[(all_data['date']==target_month) & (all_data['group']==group_key)]
+        
+        for _, row in group_db.iterrows():
+            m_idx = int(row['match_id'])
+            if m_idx >= len(matches): continue
+            res1, res2 = int(row['score1']), int(row['score2'])
+            if res1 == 0 and res2 == 0: continue
+            
+            t1, t2 = matches[m_idx]
             for p in t1:
-                stats[p]["득"] += v1; stats[p]["실"] += v2; stats[p]["결과"][i] = f"{v1}:{v2}"
-                if v1 > v2: stats[p]["승"] += 1
-                elif v1 < v2: stats[p]["패"] += 1
+                stats[p]["득"] += res1; stats[p]["실"] += res2
+                if res1 > res2: stats[p]["승"] += 1
+                elif res1 < res2: stats[p]["패"] += 1
             for p in t2:
-                stats[p]["득"] += v2; stats[p]["실"] += v1; stats[p]["결과"][i] = f"{v2}:{v1}"
-                if v2 > v1: stats[p]["승"] += 1
-                elif v2 < v1: stats[p]["패"] += 1
+                stats[p]["득"] += res2; stats[p]["실"] += res1
+                if res2 > res1: stats[p]["승"] += 1
+                elif res2 < res1: stats[p]["패"] += 1
 
-    rows = []
-    for i in range(1, n+1):
-        s = stats[i]
-        rows.append({"이름": p_names[i-1], **{f"{j+1}R": s["결과"][j] for j in range(len(matches))},
-                    "승": s["승"], "패": s["패"], "득점": s["득"], "실점": s["실"], "득실차": s["득"] - s["실"]})
-    df = pd.DataFrame(rows).sort_values(by=["승", "득실차", "득점"], ascending=False).reset_index(drop=True)
-    df.insert(0, "순위", df.index + 1)
-    st.dataframe(df, use_container_width=True, hide_index=True)
-
-# ----------------------------------------------------------------
-# 4. 메인 화면 - 탭 구성
-# ----------------------------------------------------------------
-tab1, tab2, tab3 = st.tabs(["🥇 금조", "🥈 은조", "🥉 동조"])
-
-with tab1:
-    run_group_logic("gold", "금조")
-
-with tab2:
-    run_group_logic("silver", "은조")
-
-with tab3:
-    run_group_logic("bronze", "동조")
-
-# 초기화 버튼
-st.sidebar.divider()
-if st.sidebar.button("♻️ 전체 데이터 초기화"):
-    for k in list(st.session_state.keys()):
-        del st.session_state[k]
-    st.rerun()
+        rows = []
+        for i in range(1, n+1):
+            s = stats[i]
+            rows.append({"이름": p_names[i-1], "승": s["승"], "패": s["패"], "득실차": s["득"]-s["실"], "득점": s["득"]})
+        
+        df_rank = pd.DataFrame(rows).sort_values(by=["승", "득실차", "득점"], ascending=False).reset_index(drop=True)
+        df_rank.insert(0, "순위", df_rank.index + 1)
+        st.dataframe(df_rank, use_container_width=True, hide_index=True)
