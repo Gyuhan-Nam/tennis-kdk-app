@@ -9,78 +9,83 @@ st.set_page_config(page_title="KDK 테니스", layout="wide")
 # 2. 구글 시트 연결
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 3. [초슬림 최적화] CSS 스타일
+# 3. [가로 폭 압축] 핵심 CSS 수정
 st.markdown("""
     <style>
-    /* 전체 여백 극한으로 줄이기 */
-    .block-container { padding: 0.5rem 0.5rem !important; }
+    /* 전체 여백 제거 */
+    .block-container { padding: 0.5rem !important; }
     
-    /* 컬럼 가로 배치 강제 및 간격 최소화 */
-    [data-testid="column"] {
-        flex: 1 1 0% !important;
-        min-width: 0px !important;
-        padding: 0px 2px !important;
-    }
+    /* [가로 정렬 강제] 컬럼이 세로로 쌓이는 현상 절대 방지 */
     [data-testid="stHorizontalBlock"] {
-        gap: 2px !important;
+        display: flex !important;
+        flex-direction: row !important;
+        flex-wrap: nowrap !important;
         align-items: center !important;
+        justify-content: center !important;
+        gap: 2px !important;
+    }
+    [data-testid="column"] {
+        min-width: 0px !important;
+        flex: 1 !important;
+        padding: 0px !important;
     }
 
-    /* 선수 이름 칸 - 높이와 여백 최소화 */
+    /* [검은 칸 너비 조절] 가로 길이를 줄이고 가운데 정렬 */
     .player-box {
         background-color: #1e293b;
         color: white;
-        border-radius: 4px;
-        padding: 2px 1px !important; /* 패딩 최소화 */
+        border-radius: 6px;
+        padding: 4px 2px !important;
         text-align: center;
-        font-size: 0.75rem !important; /* 글자 크기 살짝 축소 */
-        line-height: 1.0 !important;
-        min-height: 34px !important; /* 높이 대폭 축소 */
+        font-size: 0.8rem !important;
+        line-height: 1.1 !important;
+        min-height: 40px !important;
+        width: 85% !important; /* 가로 너비 85%로 축소 */
+        max-width: 90px !important; /* 최대 너비 제한 */
+        margin: 0 auto 4px auto !important; /* 가운데 정렬 및 하단 여백 */
         display: flex;
         flex-direction: column;
         justify-content: center;
-        margin-bottom: 2px !important;
     }
 
-    /* 점수 표시 - 높이 조절 */
+    /* 점수판 영역 축소 */
     .score-display {
-        font-size: 2rem !important;
+        font-size: 2.2rem !important;
         font-weight: 800;
         color: #ff4b4b;
         text-align: center;
         line-height: 1.0 !important;
-        margin: 0px !important;
     }
-    .vs-text { font-size: 0.55rem; color: #64748b; text-align: center; margin-bottom: -2px; }
+    .vs-text { font-size: 0.6rem; color: #64748b; text-align: center; margin-bottom: -4px; }
 
-    /* 버튼 높이 축소 */
+    /* 버튼 크기 더 작게 (가로 폭에 맞춤) */
     .stButton > button {
-        width: 100% !important;
-        height: 1.8rem !important; /* 버튼 높이 축소 */
-        font-size: 0.9rem !important;
+        width: 85% !important;
+        max-width: 90px !important;
+        margin: 0 auto !important;
+        display: block !important;
+        height: 2rem !important;
+        font-size: 1rem !important;
         padding: 0px !important;
-        margin-top: 1px !important;
-        border-radius: 4px !important;
+        border-radius: 6px !important;
     }
     
-    /* 저장 버튼만 조금 더 크게 */
-    .btn-save button {
-        background-color: #10b981 !important;
-        color: white !important;
-        height: 2.5rem !important;
-        font-size: 1rem !important;
-        margin-top: 8px !important;
-    }
-
-    /* 순위표 글자 크기 조절 */
-    div[data-testid="stDataFrame"] td, div[data-testid="stDataFrame"] th {
+    /* 리셋 버튼은 더 작게 */
+    .btn-reset button {
+        width: 40px !important;
+        height: 30px !important;
         font-size: 0.8rem !important;
     }
-    
-    /* 탭 간격 축소 */
-    button[data-baseweb="tab"] {
-        padding: 8px 12px !important;
-        font-size: 0.85rem !important;
+
+    /* 저장 버튼 */
+    .btn-save button {
+        width: 100% !important;
+        max-width: 250px !important;
+        background-color: #10b981 !important;
+        color: white !important;
+        height: 3rem !important;
+        font-size: 1.1rem !important;
+        margin-top: 10px !important;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -132,8 +137,8 @@ tabs = st.tabs(["🥇 금", "🥈 은", "🥉 동"])
 for i, group_name in enumerate(["금", "은", "동"]):
     group_key = ["gold", "silver", "bronze"][i]
     with tabs[i]:
-        # 인원 설정 (매우 작게)
-        c_n1, c_n2 = st.columns([1, 2.5])
+        # 설정 영역
+        c_n1, c_n2 = st.columns([1, 2])
         with c_n1: n = st.number_input(f"인원", 5, 10, 6, key=f"n_{group_key}")
         with c_n2:
             with st.expander("👤 이름편집"):
@@ -152,9 +157,9 @@ for i, group_name in enumerate(["금", "은", "동"]):
             st.session_state[ss_key_s1] = int(curr_m.iloc[0]['score1']) if not curr_m.empty else 0
             st.session_state[ss_key_s2] = int(curr_m.iloc[0]['score2']) if not curr_m.empty else 0
 
-        # --- 초슬림 점수 입력 UI ---
+        # --- 가로 고정 점수판 UI ---
         t1, t2 = matches[selected_m_idx]
-        col1, col_mid, col2 = st.columns([1, 0.8, 1])
+        col1, col_mid, col2 = st.columns([2, 1.2, 2])
         
         with col1:
             st.markdown(f"<div class='player-box'>{p_names[t1[0]-1]}<br>{p_names[t1[1]-1]}</div>", unsafe_allow_html=True)
@@ -165,8 +170,10 @@ for i, group_name in enumerate(["금", "은", "동"]):
 
         with col_mid:
             st.markdown(f"<div class='vs-text'>VS</div><div class='score-display'>{st.session_state[ss_key_s1]}:{st.session_state[ss_key_s2]}</div>", unsafe_allow_html=True)
+            st.markdown("<div class='btn-reset'>", unsafe_allow_html=True)
             if st.button("🔄", key=f"rs_{group_key}"):
                 st.session_state[ss_key_s1] = 0; st.session_state[ss_key_s2] = 0; st.rerun()
+            st.markdown("</div>", unsafe_allow_html=True)
 
         with col2:
             st.markdown(f"<div class='player-box'>{p_names[t2[0]-1]}<br>{p_names[t2[1]-1]}</div>", unsafe_allow_html=True)
@@ -189,7 +196,7 @@ for i, group_name in enumerate(["금", "은", "동"]):
                 st.success("저장 완료!"); st.rerun()
         st.markdown("</div>", unsafe_allow_html=True)
 
-        # --- 순위표 (가로 스크롤 가능) ---
+        # 순위표
         st.divider()
         stats = {i: {"승":0, "패":0, "득":0, "실":0, "결과": ["-"] * len(matches)} for i in range(1, n+1)}
         group_db = all_data[(all_data['date']==target_month) & (all_data['group']==group_key)]
