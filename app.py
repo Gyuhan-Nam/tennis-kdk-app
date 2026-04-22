@@ -73,8 +73,25 @@ st.title("🎾 KDK 테니스 통합 시스템")
 # 사이드바 설정
 with st.sidebar:
     st.header("📅 대회 정보")
-    today = datetime.now().strftime("%Y-%m")
-    target_month = st.selectbox("대회 월 선택", [f"2024-{i:02d}" for i in range(1, 13)], index=int(datetime.now().month)-1)
+    
+    # 1. 현재 날짜 정보 가져오기
+    now = datetime.now()
+    curr_year = now.year
+    curr_month = now.month
+
+    # 2. 연도 선택 (2024년부터 내년까지 선택 가능)
+    year_list = list(range(2024, curr_year + 2))
+    selected_year = st.selectbox("연도 선택", year_list, index=year_list.index(curr_year))
+
+    # 3. 월 선택
+    month_list = [f"{i:02d}" for i in range(1, 13)]
+    selected_month = st.selectbox("월 선택", month_list, index=curr_month - 1)
+
+    # 4. DB 조회를 위한 날짜 키값 생성 (예: "2024-05")
+    target_month = f"{selected_year}-{selected_month}"
+    
+    st.info(f"선택된 대회: {target_month}")
+    
     if st.button("🔄 데이터 강제 새로고침"):
         st.rerun()
 
