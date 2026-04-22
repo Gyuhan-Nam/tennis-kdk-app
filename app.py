@@ -138,3 +138,30 @@ for i, group_name in enumerate(["금조", "은조", "동조"]):
         st.divider()
         st.subheader(f"🏆 {group_name} 실시간 순위")
         # (순위표 계산 로직 생략 - 기존과 동일하게 all_data 사용)
+        stats = {i: {"승":0,"패":0,"득":0,"실":0} for i in range(1, n+1)}
+        group_db = all_data[(all_data['date']==target_month) & (all_data['group']==group_key)]
+        
+        for _, row in group_db.iterrows():
+            m_idx = int(row['match_id'])
+            if m_idx >= len(matches): continue
+            r1, r2 = int(row['score1']), int(row['score2'])
+            if r1 == 0 and r2 == 0: continue
+            
+            tm1, tm2 = matches[m_idx]
+            for p in tm1:
+                stats[p]["득"] += r1; stats[p]["실"] += r2
+                if r1 > r2: stats[p]["승"] += 1
+                elif r1 < r2: stats[p]["패"] += 1
+            for p in tm2:
+                stats[p]["득"] += r2; stats[p]["실"] += r1
+                if r2 > r1: stats[p]["승"] += 1
+                elif r2 < r1: stats[p]["패"] += 1
+
+        rows = []
+        for i in range(1, n+1):
+            s = stats[i]
+            rows.append({"이름": p_names[i-1], "승": s["승"], "패": s["패"], "득실차": s["득"]-s["실"], "득점": s["득"]})
+        
+        df_rank = pd.DataFrame(rows).sort_values(by=["승", "득실차", "득점"], ascending=False).reset_index(drop=True)
+        df_rank.insert(0, "순위", df_rank.index + 1)
+        st.dataframe(df_rank, use_container_width=True, hide_index=True)
