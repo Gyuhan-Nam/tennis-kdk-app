@@ -9,84 +9,89 @@ st.set_page_config(page_title="KDK 테니스", layout="wide")
 # 2. 구글 시트 연결
 conn = st.connection("gsheets", type=GSheetsConnection)
 
-# 3. [핵심] 모바일 가로 배치 강제 및 순위표 가로 스크롤 CSS
+# 3. [초슬림 최적화] CSS 스타일
 st.markdown("""
     <style>
-    /* 상단 여백 제거 */
-    .block-container { padding: 1rem !important; }
+    /* 전체 여백 극한으로 줄이기 */
+    .block-container { padding: 0.5rem 0.5rem !important; }
     
-    /* [중요] 모든 컬럼을 강제로 가로로 정렬 (모바일 무시) */
+    /* 컬럼 가로 배치 강제 및 간격 최소화 */
     [data-testid="column"] {
         flex: 1 1 0% !important;
         min-width: 0px !important;
+        padding: 0px 2px !important;
     }
     [data-testid="stHorizontalBlock"] {
-        display: flex !important;
-        flex-direction: row !important;
-        flex-wrap: nowrap !important;
+        gap: 2px !important;
         align-items: center !important;
-        justify-content: space-between !important;
-        gap: 5px !important;
     }
 
-    /* 팀 이름 박스 - 더 작고 간결하게 */
+    /* 선수 이름 칸 - 높이와 여백 최소화 */
     .player-box {
         background-color: #1e293b;
         color: white;
-        border-radius: 6px;
-        padding: 5px 2px !important;
+        border-radius: 4px;
+        padding: 2px 1px !important; /* 패딩 최소화 */
         text-align: center;
-        font-size: 0.85rem !important;
-        line-height: 1.1 !important;
-        min-height: 50px;
+        font-size: 0.75rem !important; /* 글자 크기 살짝 축소 */
+        line-height: 1.0 !important;
+        min-height: 34px !important; /* 높이 대폭 축소 */
         display: flex;
         flex-direction: column;
         justify-content: center;
+        margin-bottom: 2px !important;
     }
 
-    /* 점수 표시 - 크기 최적화 */
+    /* 점수 표시 - 높이 조절 */
     .score-display {
-        font-size: 2.2rem !important;
+        font-size: 2rem !important;
         font-weight: 800;
         color: #ff4b4b;
         text-align: center;
-        line-height: 1 !important;
+        line-height: 1.0 !important;
+        margin: 0px !important;
     }
-    .vs-text { font-size: 0.6rem; color: #64748b; text-align: center; margin-bottom: -5px; }
+    .vs-text { font-size: 0.55rem; color: #64748b; text-align: center; margin-bottom: -2px; }
 
-    /* 버튼 크기 및 간격 축소 */
+    /* 버튼 높이 축소 */
     .stButton > button {
         width: 100% !important;
-        height: 2.5rem !important;
-        font-size: 1rem !important;
+        height: 1.8rem !important; /* 버튼 높이 축소 */
+        font-size: 0.9rem !important;
         padding: 0px !important;
-        margin-top: 2px !important;
+        margin-top: 1px !important;
+        border-radius: 4px !important;
     }
     
-    /* 순위표(데이터프레임) 강제 가로 스크롤 허용 */
-    div[data-testid="stDataFrame"] {
-        overflow-x: auto !important;
-        display: block !important;
-    }
-
-    /* 저장 버튼 강조 */
+    /* 저장 버튼만 조금 더 크게 */
     .btn-save button {
         background-color: #10b981 !important;
         color: white !important;
-        height: 3.5rem !important;
-        margin-top: 10px !important;
-        font-size: 1.1rem !important;
+        height: 2.5rem !important;
+        font-size: 1rem !important;
+        margin-top: 8px !important;
+    }
+
+    /* 순위표 글자 크기 조절 */
+    div[data-testid="stDataFrame"] td, div[data-testid="stDataFrame"] th {
+        font-size: 0.8rem !important;
+    }
+    
+    /* 탭 간격 축소 */
+    button[data-baseweb="tab"] {
+        padding: 8px 12px !important;
+        font-size: 0.85rem !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# 4. KDK 대진표 로직 (생략 - 기존 동일)
+# 4. KDK 대진표 로직 (기존 동일)
 def get_kdk_matches(num):
     schedules = {5: ["12:34","13:25","14:35","15:24","23:45"], 6: ["12:34","15:46","23:56","14:25","24:36","16:35"], 7: ["12:34","56:17","35:24","14:67","23:57","16:25","46:37"], 8: ["12:34","56:78","13:57","24:68","15:26","37:48","16:38","25:47"], 9: ["12:34","56:78","19:57","23:68","49:38","15:26","36:45","17:89","24:79"], 10: ["12:34","56:78","23:6A","19:58","3A:45","27:89","4A:68","13:79","46:59","17:2A"]}
     mapping = {"1":1,"2":2,"3":3,"4":4,"5":5,"6":6,"7":7,"8":8,"9":9,"A":10}
     return [([mapping[c] for c in m.split(":")[0]], [mapping[c] for c in m.split(":")[1]]) for m in schedules.get(num, [])]
 
-# 5. DB 관련 함수 (생략 - 기존 동일)
+# 5. DB 관련 함수 (기존 동일)
 REQUIRED_COLUMNS = ["date", "group", "match_id", "score1", "score2", "last_updated"]
 @st.cache_data(ttl=60)
 def load_db_cached():
@@ -113,7 +118,6 @@ def save_db(df):
 st.title("🎾 KDK 테니스")
 
 with st.sidebar:
-    st.header("📅 설정")
     now = datetime.now()
     year = st.selectbox("연도", range(2024, now.year + 2))
     month = st.selectbox("월", [f"{i:02d}" for i in range(1, 13)], index=now.month-1)
@@ -125,11 +129,11 @@ with st.sidebar:
 all_data = load_db_cached()
 tabs = st.tabs(["🥇 금", "🥈 은", "🥉 동"])
 
-for i, group_name in enumerate(["금조", "은조", "동조"]):
+for i, group_name in enumerate(["금", "은", "동"]):
     group_key = ["gold", "silver", "bronze"][i]
     with tabs[i]:
-        # 인원 설정 영역 (가로 배치)
-        c_n1, c_n2 = st.columns([1.5, 2.5])
+        # 인원 설정 (매우 작게)
+        c_n1, c_n2 = st.columns([1, 2.5])
         with c_n1: n = st.number_input(f"인원", 5, 10, 6, key=f"n_{group_key}")
         with c_n2:
             with st.expander("👤 이름편집"):
@@ -148,7 +152,7 @@ for i, group_name in enumerate(["금조", "은조", "동조"]):
             st.session_state[ss_key_s1] = int(curr_m.iloc[0]['score1']) if not curr_m.empty else 0
             st.session_state[ss_key_s2] = int(curr_m.iloc[0]['score2']) if not curr_m.empty else 0
 
-        # --- 점수 입력 UI (완전 가로 고정) ---
+        # --- 초슬림 점수 입력 UI ---
         t1, t2 = matches[selected_m_idx]
         col1, col_mid, col2 = st.columns([1, 0.8, 1])
         
@@ -212,6 +216,4 @@ for i, group_name in enumerate(["금조", "은조", "동조"]):
             rows.append(row_data)
         df_rank = pd.DataFrame(rows).sort_values(by=["승", "득실"], ascending=False).reset_index(drop=True)
         df_rank.insert(0, "순위", df_rank.index + 1)
-        
-        # 순위표 표시
         st.dataframe(df_rank, use_container_width=True, hide_index=True)
